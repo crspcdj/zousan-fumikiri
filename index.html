@@ -595,8 +595,8 @@ const flakes = Array.from({ length: 90 }, (_, i) => [rand(i + 500), rand(i + 900
 function start() {
   if (state !== 'idle') return;
   unlockAudio();
-  // 4かいに 1かいくらい、ゾウさんの かわりに あかおにが わたってくる
-  actor = Math.random() < 0.25 ? 'oni' : 'zou';
+  // ゾウさん → あかおに → ゾウさん → あかおに と こうごに でてくる
+  actor = actor === 'zou' ? 'oni' : 'zou';
   pickRiders();
   state = 'ringing'; stateT = 0; kanTimer = 0;
 }
