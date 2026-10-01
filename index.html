@@ -38,9 +38,34 @@ resize();
 let ac = null;
 function audio() {
   if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-  if (ac.state === 'suspended') ac.resume();
+  if (ac.state !== 'running') ac.resume().catch(() => {});
   return ac;
 }
+// iPhone・iPad は、さわった しゅんかんに おとの ロックを はずさないと なにも ならない。
+// むおんの おとを ながしつづけると、マナーモードでも おとが でる。
+const silentEl = (() => {
+  const rate = 8000, n = rate / 2, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  const el = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+  el.loop = true; el.volume = 0.01; el.setAttribute('playsinline', '');
+  return el;
+})();
+function unlockAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  const a = audio();
+  const src = a.createBufferSource(); src.buffer = a.createBuffer(1, 1, 22050);
+  src.connect(a.destination); src.start(0);
+  if (silentEl.paused) silentEl.play().catch(() => {});
+}
+['touchstart', 'touchend', 'pointerdown', 'mousedown', 'click', 'keydown']
+  .forEach(ev => window.addEventListener(ev, unlockAudio, { passive: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && ac) { ac.resume().catch(() => {}); if (silentEl.paused) silentEl.play().catch(() => {}); }
+});
 function env(g, t, peak, attack, decay) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + attack);
@@ -191,6 +216,120 @@ function kii() {
     o.connect(bp); bp.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.1);
   });
 }
+// クマ「グオー」（ライオンより ひくい）
+function guo() {
+  const a = audio(), t = a.currentTime;
+  const o = a.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(80, t); o.frequency.linearRampToValueAtTime(105, t + 0.3); o.frequency.exponentialRampToValueAtTime(55, t + 0.8);
+  const lfo = a.createOscillator(); lfo.frequency.value = 25;
+  const lg = a.createGain(); lg.gain.value = 14; lfo.connect(lg); lg.connect(o.frequency);
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
+  const g = a.createGain(); env(g, t, 0.55, 0.08, 0.75);
+  o.connect(lp); lp.connect(g); g.connect(a.destination);
+  o.start(t); lfo.start(t); o.stop(t + 0.9); lfo.stop(t + 0.9);
+}
+// おに「ガオー！」
+function gaoo() {
+  gao();
+  const a = audio(), t = a.currentTime;
+  const len = 0.5, buf = a.createBuffer(1, a.sampleRate * len, a.sampleRate), ch = buf.getChannelData(0);
+  for (let k = 0; k < ch.length; k++) ch[k] = (Math.random() * 2 - 1) * (1 - k / ch.length) * 0.6;
+  const src = a.createBufferSource(); src.buffer = buf;
+  const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 0.8;
+  const g = a.createGain(); g.gain.value = 0.5;
+  src.connect(bp); bp.connect(g); g.connect(a.destination); src.start(t);
+}
+// パンダ「クゥーン」
+function kuun() {
+  const a = audio(), t = a.currentTime;
+  const o = a.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(600, t); o.frequency.linearRampToValueAtTime(950, t + 0.2); o.frequency.exponentialRampToValueAtTime(480, t + 0.6);
+  const lfo = a.createOscillator(); lfo.frequency.value = 9;
+  const lg = a.createGain(); lg.gain.value = 20; lfo.connect(lg); lg.connect(o.frequency);
+  const g = a.createGain(); env(g, t, 0.35, 0.04, 0.55);
+  o.connect(g); g.connect(a.destination); o.start(t); lfo.start(t); o.stop(t + 0.65); lfo.stop(t + 0.65);
+}
+// ペンギン「グワッグワッ」
+function guwa() {
+  const a = audio(), t = a.currentTime;
+  [0, 0.2].forEach(d => {
+    const o = a.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(420, t + d); o.frequency.exponentialRampToValueAtTime(300, t + d + 0.12);
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 3;
+    const g = a.createGain(); env(g, t + d, 0.45, 0.01, 0.13);
+    o.connect(bp); bp.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.16);
+  });
+}
+// ウサギ「プゥプゥ」
+function puu() {
+  const a = audio(), t = a.currentTime;
+  [0, 0.15].forEach(d => {
+    const o = a.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(1000, t + d); o.frequency.exponentialRampToValueAtTime(700, t + d + 0.08);
+    const g = a.createGain(); env(g, t + d, 0.3, 0.005, 0.08);
+    o.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.1);
+  });
+}
+// キリン「フンフン」
+function funfun() {
+  const a = audio(), t = a.currentTime;
+  [0, 0.25].forEach(d => {
+    const o = a.createOscillator(); o.type = 'triangle'; o.frequency.value = 175;
+    const g = a.createGain(); env(g, t + d, 0.3, 0.03, 0.18);
+    o.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.25);
+  });
+}
+// キツネ「コンコン」
+function konkon() {
+  const a = audio(), t = a.currentTime;
+  [0, 0.2].forEach(d => {
+    const o = a.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(1150, t + d); o.frequency.exponentialRampToValueAtTime(850, t + d + 0.1);
+    const g = a.createGain(); env(g, t + d, 0.35, 0.005, 0.12);
+    o.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.15);
+  });
+}
+// ♪ メロディ（フニクリ・フニクラ：1880年 ルイージ・デンツァ さっきょく。
+//   さっきょくしゃは 1922ねんに なくなっていて、きょくの けんりは きれている。
+//   かしは つかわず、おとも この プログラムで つくっている）
+const NOTE = { G4: 392.00, A4: 440.00, Bb4: 466.16, C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, F4: 349.23, R: 0 };
+const TUNE = (() => {
+  const A = [['E5', 3], ['D5', 1], ['R', 2]], B = [['F5', 2], ['E5', 1], ['D5', 2], ['F5', 1]],
+    C = [['E5', 3], ['E5', 1], ['R', 2]], D = [['A4', 2], ['A4', 1], ['A4', 2], ['A4', 1]];
+  return [...A, ...A, ...B, ...C, ...A, ...A, ...B, ...C,
+    ['C5', 2], ['A4', 1], ['A4', 2], ['A4', 1], ...D,
+    ['F5', 6], ['G5', 2], ['F5', 1], ['D5', 2], ['F5', 1],
+    ['D5', 2], ['A4', 1], ['A4', 2], ['Bb4', 1], ['C5', 2], ['Bb4', 1], ['A4', 2], ['G4', 1], ['F4', 6]];
+})();
+const BEAT = 0.155;   // 8ぶおんぷ 1つぶんの ながさ
+let melodyEnd = 0;
+function playMelody() {
+  const a = audio();
+  let t = a.currentTime + 0.05, bar = 0;
+  TUNE.forEach(([n, len]) => {
+    const d = len * BEAT;
+    if (n !== 'R') {
+      const f = NOTE[n];
+      [['triangle', 1, 0.3], ['square', 0.5, 0.08], ['sine', 2, 0.12]].forEach(([type, mul, vol]) => {
+        const o = a.createOscillator(); o.type = type; o.frequency.value = f * mul;
+        const g = a.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d * 0.95);
+        o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d);
+      });
+    }
+    // 2はくごとに ひくい おと（ポン）
+    if (bar % 6 === 0) {
+      const o = a.createOscillator(); o.type = 'sine'; o.frequency.value = 174.61;
+      const g = a.createGain(); env(g, t, 0.18, 0.01, 0.3);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + 0.35);
+    }
+    bar += len; t += d;
+  });
+  melodyEnd = performance.now() / 1000 + (t - a.currentTime);
+}
+function melodyPlaying() { return performance.now() / 1000 < melodyEnd; }
 // とことこ
 function toko(hi) {
   const a = audio(), t = a.currentTime;
@@ -208,19 +347,21 @@ const POOL = [
   { kind: 'wani', w: 330, h: 56, voice: 'paku', cx: 20 },
   { kind: 'kame', w: 116, h: 46, voice: 'pyoko' },
   { kind: 'lion', w: 190, h: 150, voice: 'gao', cx: 20 },
-  { kind: 'panda', w: 180, h: 145, voice: 'pii', pitch: 520, cx: 20 },
-  { kind: 'penguin', w: 110, h: 145, voice: 'pii', pitch: 900 },
-  { kind: 'usagi', w: 150, h: 175, voice: 'pii', pitch: 1100, cx: 10 },
+  { kind: 'panda', w: 180, h: 145, voice: 'kuun', cx: 20 },
+  { kind: 'penguin', w: 110, h: 145, voice: 'guwa' },
+  { kind: 'usagi', w: 150, h: 175, voice: 'puu', cx: 10 },
   { kind: 'buta', w: 200, h: 112, voice: 'buhi', cx: 10 },
-  { kind: 'kirin', w: 190, h: 225, voice: 'pii', pitch: 640, cx: 20 },
+  { kind: 'kirin', w: 190, h: 225, voice: 'funfun', cx: 20 },
   { kind: 'saru', w: 150, h: 135, voice: 'kii', cx: 10 },
-  { kind: 'kuma', w: 190, h: 140, voice: 'gao', cx: 20 },
+  { kind: 'kuma', w: 190, h: 140, voice: 'guo', cx: 20 },
   { kind: 'kaeru', w: 140, h: 100, voice: 'kero' },
   { kind: 'hitsuji', w: 180, h: 112, voice: 'mee', cx: 5 },
   { kind: 'niwatori', w: 125, h: 140, voice: 'koke', cx: 5 },
-  { kind: 'kitsune', w: 210, h: 130, voice: 'kii', cx: 15 },
+  { kind: 'kitsune', w: 210, h: 130, voice: 'konkon', cx: 15 },
 ];
 let riders = [];
+let actor = 'zou';          // 'zou' か 'oni'
+const ONI = { kind: 'oni', voice: 'gaoo' };
 function pickRiders() {
   const bag = POOL.slice();
   for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
@@ -453,6 +594,9 @@ const flakes = Array.from({ length: 90 }, (_, i) => [rand(i + 500), rand(i + 900
 
 function start() {
   if (state !== 'idle') return;
+  unlockAudio();
+  // 4かいに 1かいくらい、ゾウさんの かわりに あかおにが わたってくる
+  actor = Math.random() < 0.25 ? 'oni' : 'zou';
   pickRiders();
   state = 'ringing'; stateT = 0; kanTimer = 0;
 }
@@ -463,15 +607,45 @@ function tap(px, py) {
   if (state !== 'crossing') return;
   for (let i = hits.length - 1; i >= 0; i--) {
     const h = hits[i];
-    if (Math.abs(px - h.x) < h.w && Math.abs(py - h.y) < h.h) { poke(h.r); return; }
+    if (Math.abs(px - h.x) < h.w && Math.abs(py - h.y) < h.h) { poke(h.r, h.x, h.y - h.h); return; }
   }
-  paon(); trunkUp = 1;
+  if (actor === 'oni') { pokeOni(walkX, layout().trackY - 300 * s); return; }
+  paon(); trunkUp = 1; say(WORDS.zou, px, py);
   if (zouJump === 0) zouVy = -300;
 }
-function poke(r) {
-  const v = { buo, paku, pyoko, gao, buhi, mee, kero, koke, kii }[r.voice];
-  if (v) v(); else pii(r.pitch);
+const VOICES = { buo, paku, pyoko, gao, guo, kuun, guwa, puu, buhi, funfun, kii, konkon, kero, mee, koke, gaoo };
+const WORDS = { kaba: 'ブォー', wani: 'パクッ', kame: 'ピョコ', lion: 'ガオー', kuma: 'グオー', panda: 'クゥーン',
+  penguin: 'グワッ', usagi: 'プゥプゥ', buta: 'ブーブー', kirin: 'フンフン', saru: 'キキッ', kitsune: 'コンコン',
+  kaeru: 'ケロケロ', hitsuji: 'メェー', niwatori: 'コケコッコー', zou: 'パオーン', oni: 'ガオー！' };
+const bubbles = [];
+function say(word, x, y) { bubbles.push({ word, x, y, life: 1.3 }); }
+function poke(r, px, py) {
+  if (r.kind === 'oni') { pokeOni(px, py); return; }
+  (VOICES[r.voice] || (() => pii(r.pitch)))();
+  say(WORDS[r.kind], px, py);
   if (r.jy === 0) r.vy = -560;
+}
+// おにを タップ：「ガオー！」と さけんで ジャンプ
+function pokeOni(px, py) {
+  gaoo(); say(WORDS.oni, px, py);
+  if (zouJump === 0) zouVy = -820;
+}
+function drawBubbles(dt) {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i]; b.life -= dt;
+    if (b.life <= 0) { bubbles.splice(i, 1); continue; }
+    const k = s * 1.1, rise = (1.3 - b.life) * 40 * s;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, b.life * 2);
+    ctx.font = `bold ${Math.round(34 * k)}px "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(b.word).width + 36 * k, h = 56 * k;
+    const x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, b.x)), y = Math.max(h, b.y - 60 * s - rise);
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#333'; ctx.lineWidth = 3 * k;
+    rr(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#e8453c'; ctx.fillText(b.word, x, y + 2 * k);
+    ctx.restore();
+  }
 }
 cv.addEventListener('pointerdown', e => { e.preventDefault(); tap(e.clientX, e.clientY); });
 
@@ -790,6 +964,97 @@ function drawRider(r, t) {
   }
 }
 
+// ---- あかおに（とらがらパンツと かなぼう）----
+function drawOni(L, t) {
+  const feetY = L.trackY + 12 * s;
+  const S = s * Math.min(1, (feetY - 12) / (450 * s));
+  const step = Math.sin(walkDist / (62 * s));
+  const dance = melodyPlaying() ? Math.abs(Math.sin(t * 4.2)) * 16 : 0;
+  const tilt = melodyPlaying() ? Math.sin(t * 4.2) * 0.05 : 0;
+  const red = '#e2452f', dark = '#c3341f', skin = '#ef6a52';
+
+  ctx.save();
+  ctx.translate(walkX, feetY);
+  ctx.scale(dir * S, S);
+  ell(0, 0, 110, 15, 'rgba(0,0,0,0.18)');
+  ctx.translate(0, -dance + zouJump);
+  ctx.rotate(tilt);
+
+  // あし と ぞうり
+  [[-62, step], [26, -step]].forEach(([x, p]) => {
+    rr(x + p * 18, -100, 36, 84, 16); ctx.fillStyle = skin; ctx.fill();
+    rr(x + p * 18 - 7, -20, 50, 20, 9); ctx.fillStyle = '#7a5a3a'; ctx.fill();
+  });
+  // うしろの うで
+  ctx.save(); ctx.translate(-66, -252); ctx.rotate(-0.25 + step * 0.3);
+  rr(-16, 0, 32, 84, 16); ctx.fillStyle = dark; ctx.fill();
+  ell(0, 90, 19, 19, dark); ctx.restore();
+
+  // とらがらパンツ
+  rr(-66, -186, 132, 96, 24); ctx.fillStyle = '#ffd34a'; ctx.fill();
+  ctx.save(); rr(-64, -184, 128, 92, 22); ctx.clip();
+  ctx.fillStyle = '#4a3418';
+  for (let i = -70; i < 70; i += 30) {
+    ctx.beginPath(); ctx.moveTo(i, -190); ctx.quadraticCurveTo(i + 18, -140, i + 4, -90);
+    ctx.lineTo(i + 18, -90); ctx.quadraticCurveTo(i + 32, -140, i + 16, -190); ctx.fill();
+  }
+  ctx.restore();
+  rr(-68, -196, 136, 20, 10); ctx.fillStyle = '#f0b429'; ctx.fill();
+
+  // からだ
+  ell(0, -240, 74, 64, red);
+  ell(8, -232, 46, 40, '#f3907c');
+
+  // かなぼう（かたに かつぐ）
+  ctx.save(); ctx.translate(84, -292); ctx.rotate(-0.55 + Math.sin(t * 3) * 0.05);
+  ctx.fillStyle = '#8a6a44'; rr(-18, -170, 50, 180, 18); ctx.fill();
+  for (let y = -156; y < -20; y += 32) { ell(-10, y, 8, 8, '#6b4e30'); ell(24, y + 16, 8, 8, '#6b4e30'); }
+  ctx.fillStyle = '#6b4e30'; rr(-14, 6, 42, 30, 12); ctx.fill();
+  ctx.restore();
+  // まえの うで
+  ctx.save(); ctx.translate(62, -284); ctx.rotate(0.75 + step * 0.2);
+  rr(-16, 0, 34, 66, 16); ctx.fillStyle = red; ctx.fill();
+  ell(1, 70, 21, 21, red); ctx.restore();
+
+  // かみのけ（あたまの うしろに かく）
+  ctx.fillStyle = '#2b2118';
+  for (let i = -66; i <= 70; i += 17) {
+    ctx.beginPath(); ctx.moveTo(14 + i, -330);
+    ctx.quadraticCurveTo(14 + i + 4, -392 - Math.abs(i) * 0.25, 14 + i + 15, -332); ctx.fill();
+  }
+  // つの
+  [[-44, -16], [62, 16]].forEach(([x, lean]) => {
+    ctx.fillStyle = '#f7e6b0';
+    ctx.beginPath(); ctx.moveTo(14 + x - 13, -356); ctx.quadraticCurveTo(14 + x + lean, -400, 14 + x + lean * 1.2, -424);
+    ctx.quadraticCurveTo(14 + x + 16, -392, 14 + x + 15, -354); ctx.fill();
+    ctx.fillStyle = '#e3cd93';
+    ctx.beginPath(); ctx.moveTo(14 + x - 6, -368); ctx.quadraticCurveTo(14 + x + lean * 0.6, -392, 14 + x + 8, -366); ctx.fill();
+  });
+  // あたま
+  ell(14, -316, 68, 62, red);
+  // まえがみ
+  ctx.fillStyle = '#2b2118';
+  ctx.beginPath(); ctx.moveTo(-50, -344); ctx.quadraticCurveTo(14, -392, 80, -344);
+  ctx.quadraticCurveTo(60, -352, 44, -340); ctx.quadraticCurveTo(26, -356, 8, -340);
+  ctx.quadraticCurveTo(-12, -354, -30, -338); ctx.fill();
+  // かお
+  ell(-6, -322, 11, 12, '#fff'); ell(-4, -322, 6.5, 8, '#222');
+  ell(36, -322, 11, 12, '#fff'); ell(38, -322, 6.5, 8, '#222');
+  ctx.strokeStyle = '#2b2118'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-20, -342); ctx.lineTo(4, -336); ctx.moveTo(52, -342); ctx.lineTo(28, -336); ctx.stroke();
+  const open = (zouJump < -10 ? 26 : 12) + dance * 0.5;
+  ctx.fillStyle = '#7a2218';
+  ctx.beginPath(); ctx.ellipse(16, -288, 28, open, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(0, -288 - open * 0.6); ctx.lineTo(8, -288 - open * 0.1); ctx.lineTo(14, -288 - open * 0.7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(22, -288 - open * 0.7); ctx.lineTo(28, -288 - open * 0.1); ctx.lineTo(36, -288 - open * 0.6); ctx.fill();
+  ell(-22, -300, 14, 9, 'rgba(255,170,170,0.5)'); ell(54, -300, 14, 9, 'rgba(255,170,170,0.5)');
+  ctx.restore();
+
+  hits.length = 0;
+  hits.push({ r: ONI, x: walkX, y: feetY + (-230 - dance + zouJump) * S, w: 140 * S, h: 230 * S });
+}
+
 function drawZou(L, t) {
   const bob = Math.abs(Math.sin(walkDist / (60 * s))) * 8;
   const step = Math.sin(walkDist / (60 * s));
@@ -936,7 +1201,7 @@ function drawPost(L, x, side, t, active) {
   ctx.restore();
 }
 
-const MOVE_TIME = 2.6;
+const MOVE_TIME = 3.4;
 function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
 
 function drawHint(t) {
@@ -963,29 +1228,30 @@ function update(dt) {
   } else { lightOn = false; }
 
   if (state === 'ringing') {
-    if (stateT > 1.2) barDown = Math.min(1, barDown + dt / 2.8);
-    if (barDown >= 1 && stateT > 4.2) {
+    if (stateT > 1.4) barDown = Math.min(1, barDown + dt / 3.4);
+    if (barDown >= 1 && stateT > 5.2) {
       state = 'crossing'; stateT = 0;
       walkX = dir > 0 ? -380 * s : W + 380 * s; walkDist = 0; lastStep = 0;
+      if (actor === 'oni') playMelody();
     }
   } else if (state === 'crossing') {
-    const speed = (W + 760 * s) / 10;
+    const speed = (W + 760 * s) / 15;   // わたりきるまで 15びょう
     walkX += dir * speed * dt; walkDist += speed * dt;
     const stepIdx = Math.floor(walkDist / (60 * s * Math.PI));
     if (stepIdx !== lastStep) {
       lastStep = stepIdx; dosun(); shake = 4;
       puffs.push({ x: walkX + (Math.random() - 0.5) * 120 * s, y: layout().trackY + 10 * s, life: 0.6 });
     }
-    if (stateT > 1.5 && stateT - dt <= 1.5) { paon(); trunkUp = 1; }
+    if (actor === 'zou' && stateT > 1.5 && stateT - dt <= 1.5) { paon(); trunkUp = 1; say(WORDS.zou, walkX, layout().trackY - 280 * s); }
     if ((dir > 0 && walkX > W + 390 * s) || (dir < 0 && walkX < -390 * s)) { state = 'raising'; stateT = 0; }
   } else if (state === 'raising') {
     if (stateT > 0.8) barDown = Math.max(0, barDown - dt / 2.5);
     if (barDown <= 0 && stateT > 3.5) { state = 'moving'; stateT = 0; moveStepT = 0; nextTheme = pickNextTheme(); }
   } else if (state === 'moving') {
     moveStepT -= dt;
-    if (moveStepT <= 0 && stateT < MOVE_TIME - 0.2) { moveStepT = 0.22; toko(Math.floor(stateT / 0.22) % 2); }
+    if (moveStepT <= 0 && stateT < MOVE_TIME - 0.2) { moveStepT = 0.28; toko(Math.floor(stateT / 0.28) % 2); }
     if (stateT >= MOVE_TIME) { state = 'idle'; stateT = 0; rounds++; dir = -dir; curTheme = nextTheme; }
-  } else if (state === 'idle' && rounds > 0 && stateT > 1.2) {
+  } else if (state === 'idle' && rounds > 0 && stateT > 2) {
     start();
   }
 
@@ -1014,7 +1280,7 @@ function frame(now) {
     ctx.translate(ox, 0);
     ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
     drawScene(L, T, th);
-    if (active && state === 'crossing') drawZou(L, T);
+    if (active && state === 'crossing') (actor === 'oni' ? drawOni : drawZou)(L, T);
     if (active) puffs.forEach(p => {
       const r = (1 - p.life / 0.6) * 40 * s + 10 * s;
       ell(p.x, p.y - (1 - p.life / 0.6) * 20 * s, r, r * 0.6, `rgba(210,190,160,${p.life})`);
@@ -1024,7 +1290,20 @@ function frame(now) {
     if (th.snow) drawSnow(T);
     ctx.restore();
   });
+  drawBubbles(dt);
   if (state === 'idle' && rounds === 0) drawHint(T);
+  // おとが でない ときは、おしえてあげる
+  if (!ac || ac.state !== 'running') {
+    ctx.save();
+    ctx.font = `bold ${Math.round(22 * s)}px "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const msg = 'おとが でないときは がめんを さわってね（マナーモードも オフに）';
+    const w = ctx.measureText(msg).width + 28 * s;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    rr(W / 2 - w / 2, 8 * s, w, 36 * s, 18 * s); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(msg, W / 2, 15 * s);
+    ctx.restore();
+  }
   ctx.restore();
   requestAnimationFrame(frame);
 }
